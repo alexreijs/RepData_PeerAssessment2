@@ -1,0 +1,126 @@
+---
+title: "Which severe weather type impacts population health and causes damge to property the most"
+author: "A. Reijs"
+date: "26 Jul 2015"
+output: html_document
+---
+
+## Synopsis
+
+This project involves exploring the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. This database tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage. This analysis looks at the latter three and the type of the weather event that occured. In order to show which of these types has the most impact, we will calculate means for each type per year. The results will consist of a few selected plots, these can be used to draw conclusions of your own.
+
+## Data Processing 
+
+#### Loading the data
+
+The following part of code will cover the steps necessary to acquire and process the data for this analysis. We'll start off by downloading the file we need and reading it into a variable. This step may take a while, but it will be cached.
+```{r cache=TRUE}
+if (!file.exists('./StormData.csv.bz2'))
+    download.file('https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2', './StormData.csv.bz2', method = 'curl')
+
+stormData <- read.csv('./StormData.csv.bz2')
+```
+
+Next, we'll format the dates of the beginning and the end of the observation. We'll also make a column indicating the year of the observation for convenience.
+```{r}
+stormData$BGN_DATE <- as.Date(stormData$BGN_DATE, '%m/%d/%Y')
+stormData$END_DATE <- as.Date(stormData$END_DATE, '%m/%d/%Y')
+stormData$YEAR <- format(stormData$BGN_DATE, '%Y')
+```
+
+In order to calculate damage done to property and crops, we need to multiply the data using a factor provided by the data. It is either 'K', 'M', or 'B', standing for a thousand, million and billion respectively.
+```{r}
+stormData$PROPDMGABS <- stormData$PROPDMG * ifelse(toupper(stormData$PROPDMGEXP) == 'K', 1000, 
+                                                ifelse(toupper(stormData$PROPDMGEXP) == 'M', 1000000, 
+                                                    ifelse(toupper(stormData$PROPDMGEXP) == 'B', 1000000000, 0)))
+
+stormData$CROPDMGABS <- stormData$CROPDMG * ifelse(toupper(stormData$CROPDMGEXP) == 'K', 1000, 
+                                                ifelse(toupper(stormData$CROPDMGEXP) == 'M', 1000000, 
+                                                    ifelse(toupper(stormData$CROPDMGEXP) == 'B', 1000000000, 0)))
+```
+
+For this analysis we will only be looking at data from 2000 to 2011
+```{r}
+stormData <- stormData[stormData$YEAR >= 2000 & stormData$YEAR <= 2011, ]
+```
+
+#### Health of population
+
+As we are interested in fatalities and injuries as a result of weather, let's do some calculations on the data. First, we sum fatalities per year + event type and save it into a variable. Next, we're going to calculate the mean of each year per event type and save it again. 
+
+```{r}
+fatalitiesSumYearType <- aggregate(FATALITIES ~ YEAR + EVTYPE, data = stormData, sum)
+fatalitiesMeanYear <- aggregate(FATALITIES ~ EVTYPE, data = fatalitiesSumYearType, mean)
+```
+
+Since we want going to show this data in a plot and there are a lot of events, let's make a top 30. We're going to start by sorting the events by the average number of fatalities. Next we're going to bind to the first 30 rows to a new row called "OTHERS", containing the sum of the rest of the events below the top 30.
+
+```{r}
+fatalitiesMeanYear <- fatalitiesMeanYear[with(fatalitiesMeanYear, order(-FATALITIES)), ]
+levels(fatalitiesMeanYear$EVTYPE) <- c(levels(fatalitiesMeanYear$EVTYPE), "OTHERS")
+fatalitiesMeanYear <- rbind(fatalitiesMeanYear[1:30, ],
+                            c("OTHERS", sum(fatalitiesMeanYear[31:nrow(fatalitiesMeanYear), "FATALITIES"])))
+fatalitiesMeanYear$FATALITIES <- as.numeric(fatalitiesMeanYear$FATALITIES)
+```
+
+We need to repeat this process for the average number of injuries per year by event type as well.
+```{r}
+injuriesSumYearType <- aggregate(INJURIES ~ YEAR + EVTYPE, data = stormData, sum)
+injuriesMeanYear <- aggregate(INJURIES ~ EVTYPE, data = injuriesSumYearType, mean)
+injuriesMeanYear <- injuriesMeanYear[with(injuriesMeanYear, order(-INJURIES)), ]
+levels(injuriesMeanYear$EVTYPE) <- c(levels(injuriesMeanYear$EVTYPE), "OTHERS")
+injuriesMeanYear <- rbind(injuriesMeanYear[1:30, ],
+                          c("OTHERS", sum(injuriesMeanYear[31:nrow(injuriesMeanYear), "INJURIES"])))
+injuriesMeanYear$INJURIES <- as.numeric(injuriesMeanYear$INJURIES)
+```
+
+#### Damage done
+
+In order to say something meaningful about weather damage in economic terms, let's do some calculations on the data. We will repeat the process from before, only now for property damage and crop damage. We will only look at the top 15 this time. Also, we will be showing millions of dollars, so let's divide our results.
+
+```{r}
+propDmgSumYearType <- aggregate(PROPDMGABS ~ YEAR + EVTYPE, data = stormData, sum)
+propDmgMeanYear <- aggregate(PROPDMGABS ~ EVTYPE, data = propDmgSumYearType, mean)
+propDmgMeanYear <- propDmgMeanYear[with(propDmgMeanYear, order(-PROPDMGABS)), ]
+levels(propDmgMeanYear$EVTYPE) <- c(levels(propDmgMeanYear$EVTYPE), "OTHERS")
+propDmgMeanYear <- rbind(propDmgMeanYear[1:15, ],
+                          c("OTHERS", sum(propDmgMeanYear[16:nrow(propDmgMeanYear), "PROPDMGABS"])))
+propDmgMeanYear$PROPDMGABS <- as.numeric(propDmgMeanYear$PROPDMGABS) / 1000000
+
+cropDmgSumYearType <- aggregate(CROPDMGABS ~ YEAR + EVTYPE, data = stormData, sum)
+cropDmgMeanYear <- aggregate(CROPDMGABS ~ EVTYPE, data = cropDmgSumYearType, mean)
+cropDmgMeanYear <- cropDmgMeanYear[with(cropDmgMeanYear, order(-CROPDMGABS)), ]
+levels(cropDmgMeanYear$EVTYPE) <- c(levels(cropDmgMeanYear$EVTYPE), "OTHERS")
+cropDmgMeanYear <- rbind(cropDmgMeanYear[1:15, ],
+                          c("OTHERS", sum(cropDmgMeanYear[16:nrow(cropDmgMeanYear), "PROPDMGABS"])))
+cropDmgMeanYear$CROPDMGABS <- as.numeric(cropDmgMeanYear$CROPDMGABS) / 1000000
+```
+
+## Results
+
+#### Health of population
+
+The plots below show the top 30 calculated before. As you can see most injuries and fatalities are caused by tornados followed by excessive heat.
+```{r fig.width = 10, fig.height = 6}
+par(mar = c(4, 8, 2, 0.1), las = 1, mfrow = c(1, 2), cex.main = 0.9)
+
+barplot(fatalitiesMeanYear$FATALITIES, horiz = TRUE, cex.names = 0.6, names.arg = fatalitiesMeanYear$EVTYPE,
+        main = "Average fatalities per year by type", xlab = "Fatalities")
+
+barplot(injuriesMeanYear$INJURIES, horiz = TRUE, cex.names = 0.6, names.arg = injuriesMeanYear$EVTYPE,
+        main = "Average injuries per year by type", xlab = "Injuries")
+```
+
+
+#### Damage done
+
+The hurricane / typhone event seems to be most costly to property damage, follow by flood and storm surge. Drought is obviously a major factor in crop damage.
+```{r fig.width = 10, fig.height = 6}
+par(mar = c(4, 8, 2, 0.1), las = 1, mfrow = c(1, 2), cex.main = 0.9)
+
+barplot(propDmgMeanYear$PROPDMGABS, horiz = TRUE, cex.names = 0.7, names.arg = propDmgMeanYear$EVTYPE,
+        main = "Average property damage per year by type", xlab = "Millions of dollars")
+
+barplot(cropDmgMeanYear$CROPDMGABS, horiz = TRUE, cex.names = 0.7, names.arg = cropDmgMeanYear$EVTYPE,
+        main = "Average crop damage per year by type", xlab = "Millions of dollars")
+```
